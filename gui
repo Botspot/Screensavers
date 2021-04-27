@@ -1,0 +1,233 @@
+#!/bin/bash
+
+DIRECTORY="$(dirname "$0")"
+
+closewindows() {
+  kill $pid1 2>/dev/null || echo 'pid1 not found'
+  kill $(cat "$DIRECTORY/pid2" 2>/dev/null) 2>/dev/null || echo 'pid2 not found'
+}
+
+error() {
+  echo -e "\e[91m$1\e[39m" 1>&2
+  
+  closewindows
+  #run cleanup function
+  cleanup
+  
+  kill -w -s TERM $TOP_PID
+}
+
+
+trap closewindows EXIT
+export TOP_PID=$$
+
+#list of subdirectory names. hidden directories not shown.
+list="$(ls "$DIRECTORY"/*/ -d | sed "s|$DIRECTORY/||g" | sed -e 's-/$--')"
+
+#clear currentclick
+"$DIRECTORY"/clickhandler
+
+checkimages() { #resize all *.png images to 500px wide
+  #list of images found in screensaver folders - full paths
+  imagelist="$(ls "$DIRECTORY"/*/*.png)"
+  
+  PREIFS="$IFS"
+  IFS=$'\n'
+  for image in $imagelist ;do
+    #if backup image doesn't exist and image is not 500 pixel wide
+    
+    sc_original_path="$(dirname "$image")/screenshot-original.png"
+    
+    if [ ! -f "$sc_original_path" ];then
+      #backup the image
+      mv -f "$image" "$sc_original_path"
+      
+      if [ "$(identify -format '%w' "$sc_original_path")" != 500 ];then
+        #resize the image to 500 pixels wide, and save it to screenshot.png
+        convert "$sc_original_path" -resize 500x "$(dirname "$image")/screenshot.png"
+      fi
+      
+    else
+      #image is already 500px wide and/or backup image exists
+      true
+    fi
+  done
+  IFS="$PREIFS"
+}
+checkimages
+
+cleanup() {
+  rm -f "$DIRECTORY/window2-exitcode" "$DIRECTORY/pid2" "$DIRECTORY/pid1" "$DIRECTORY/window1-exitcode" "$DIRECTORY/currentclick"
+}
+#run cleanup function
+cleanup
+
+
+#Screen dimension stuff
+{
+screen_width="$(xdpyinfo | grep 'dimensions:' | tr 'x' '\n' | tr ' ' '\n' | sed -n 7p)"
+screen_height="$(xdpyinfo | grep 'dimensions:' | tr 'x' '\n' | tr ' ' '\n' | sed -n 8p)"
+#total dimensions for both windows side by side
+height=400
+width=800
+
+yoffset=$(((screen_height/2)-(height/2)))
+
+#width of first window
+width1=200
+#width of second window
+width2=$((width - width1))
+
+#screen offsets for window 1
+xoffset1=$(((screen_width/2)-(width/2)))
+#screen offsets for window 2
+xoffset2=$(((screen_width/2)-(width/2)+width1))
+}
+
+#Deleting this file will kill the script
+echo '' > "$DIRECTORY/closefile"
+(while [ -f "$DIRECTORY/closefile" ];do
+  sleep 1
+done
+error "exited" ) &
+
+
+#screensaver list on the left, run in the background
+(echo "$list" | yad --list --geometry=${width1}x${height}+${xoffset1}+${yoffset} --window-icon=xscreensaver --title='' \
+  --no-headers --column=item --select-action="$DIRECTORY"/clickhandler --no-buttons &
+pid1=$!
+echo $pid1 > "$DIRECTORY/pid1"
+wait $pid1
+echo $? > "$DIRECTORY/window1-exitcode"
+rm -f "$DIRECTORY/closefile") &
+
+#wait for pid1 file to exist (wait for window1 to launch)
+while [ ! -f "$DIRECTORY/pid1" ];do
+  sleep 0.1
+done
+pid1="$(cat "$DIRECTORY/pid1")"
+
+#wait until a screensaver is clicked before launching second window
+echo '' > "${DIRECTORY}/currentclick"
+currentclick="$(cat "${DIRECTORY}/currentclick")"
+pastclick="$currentclick"
+while [ "$pastclick" == "$currentclick" ] && [ ! -f "$DIRECTORY/window2-exitcode" ];do
+  pastclick="$currentclick"
+  currentclick="$(cat "${DIRECTORY}/currentclick")"
+  sleep 0.1
+done
+
+while true;do #main loop that runs right pane forever
+  currentclick="$(cat "${DIRECTORY}/currentclick")"
+  #refreshes window2 each time a new list item is selected
+  output="$(while true;do
+    #screensaver preview window
+    [ ! -z "$pid2" ] && kill $pid2 # kill previous instance if it exists
+    rm -f "$DIRECTORY/window2-exitcode"
+    (yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver \
+      --form --columns=2 --separator='\n' \
+      --field="Wait: ":NUM "10" --field="minutes":RO "" \
+      "$([ -f "$DIRECTORY/$currentclick/screenshot.png" ] && echo --image="$DIRECTORY/$currentclick/screenshot.png")" --image-on-top \
+      --button="Preview:0" --button="Enable:2" &
+    pid2=$!
+    echo "$pid2" > "$DIRECTORY/pid2"
+    
+    #write exit code to file as long as it was not the termination exit code. (143)
+    wait $pid2 ; exitcode2=$?
+    if [ $exitcode2 != 143 ];then
+      echo $exitcode2 > "$DIRECTORY/window2-exitcode"
+    fi
+    ) &
+    
+    sleep 0.5
+    pid2="$(cat "$DIRECTORY/pid2")"
+    
+    #wait until selection in window1 changes
+    pastclick="$currentclick"
+    while [ -f "${DIRECTORY}/currentclick" ] && [ "$pastclick" == "$currentclick" ] && [ ! -f "$DIRECTORY/window2-exitcode" ];do
+      pastclick="$currentclick"
+      currentclick="$(cat "${DIRECTORY}/currentclick")"
+      sleep 0.1
+    done
+    if [ -f "$DIRECTORY/window2-exitcode" ];then
+      #if exitcode file exists, exit this while loop with that exit code.
+      echo "exit $(cat "$DIRECTORY/window2-exitcode")" 1>&2
+      exit "$(cat "$DIRECTORY/window2-exitcode")"
+      break
+    elif [ ! -f "${DIRECTORY}/currentclick" ];then
+      #exit if currentclick missing
+      exit 0
+    fi
+  done)" #exits with yad's exit code placed in window2-exitcode file and as the whole statement's exit code
+  button=$?
+  
+  echo "Output: ${output}EOO"
+  
+  currentclick="$(cat "${DIRECTORY}/currentclick")"
+  
+  case $button in
+    1)
+      echo "User exited."
+      exit 0
+      ;;
+    252)
+      echo "User exited."
+      exit 0
+      ;;
+    0)
+      echo "Button: Preview"
+      
+      echo "Running install.sh for '$currentclick'..."
+      #run selected screensaver's install script
+      "${DIRECTORY}/$currentclick/install.sh"
+      
+      echo "Running run.sh for '$currentclick'..."
+      #run selected screensaver's run script
+      "${DIRECTORY}/$currentclick/run.sh"
+      
+      ;;
+    2)
+      echo "Button: Enable"
+      
+      echo "Running install.sh for '$currentclick'..."
+      #run selected screensaver's install script
+      "${DIRECTORY}/$currentclick/install.sh"
+      
+      echo "Creating systemd service for '$currentclick'..."
+      
+      #Stop existing screensaver.service
+      if [ -f /etc/systemd/system/screensaver.service ]; then
+        sudo systemctl stop screensaver	
+        sudo systemctl disable screensaver	
+      fi
+      
+      #create the service
+      echo "[Unit]
+      Description=Screensaver
+      
+      [Service]
+      User=pi
+      Type=simple
+      ExecStart=/bin/bash ${DIRECTORY}/$currentclick/run.sh
+      
+      [Install]
+      WantedBy=multi-user.target" | sudo tee /etc/systemd/system/screensaver.service
+      
+      sudo systemctl daemon-reload
+      sudo systemctl start screensaver
+      sudo systemctl enable screensaver
+      
+      #print instructions
+      echo "Reload service daemon      : sudo systemctl daemon-reload
+      Verify service is running  : sudo systemctl status screensaver
+      Enable on startup          : sudo systemctl enable screensaver
+      Start screensaver service  : sudo systemctl start screensaver
+      Stop screensaver service   : sudo systemctl stop screensaver"
+      
+      ;;
+    *)
+      error "Unknown button: $button"
+      ;;
+  esac
+  checkimages &
+done
