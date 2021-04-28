@@ -1,0 +1,28 @@
+#!/bin/bash
+
+DIRECTORY="$(dirname "$0")"
+
+error() {
+  echo -e "\e[91m$1\e[39m" 1>&2
+  exit 1
+}
+
+#launch the settings for a given Windows screensaver, based on the currentclick file
+
+if [ ! -f "${DIRECTORY}/currentclick" ];then
+  error "currentclick file does not exist!\nThis script is meant to launch the settings for a given screensaver."
+fi
+
+currentclick="$(cat "${DIRECTORY}/currentclick")"
+
+#Attempt to generate settings script if it doesn't exist
+if [ ! -f "$DIRECTORY/$currentclick/settings.sh" ];then
+  cat "$DIRECTORY/$currentclick/run.sh" | sed 's+ /s$+ /c$+g' > "$DIRECTORY/$currentclick/settings.sh"
+  chmod +x "$DIRECTORY/$currentclick/settings.sh"
+fi
+
+echo "Running install.sh for '$currentclick'..." 1>&2
+"$DIRECTORY/$currentclick/install.sh" 1>&2 || exit 1
+
+echo "Running settings.sh for '$currentclick'..." 1>&2
+"$DIRECTORY/$currentclick/settings.sh" 1>&2

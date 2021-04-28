@@ -7,4 +7,4 @@ if [[ ! -e $dir ]]; then
 fi
 
 #Install screensaver
-cp "$(dirname "$0")/badapple.scr" ~/.screensavers/drive_c/windows/
+cp "$(dirname "$0")/Bubbles.scr" ~/.screensavers/drive_c/windows/

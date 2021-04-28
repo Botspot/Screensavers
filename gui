@@ -68,8 +68,8 @@ cleanup
 screen_width="$(xdpyinfo | grep 'dimensions:' | tr 'x' '\n' | tr ' ' '\n' | sed -n 7p)"
 screen_height="$(xdpyinfo | grep 'dimensions:' | tr 'x' '\n' | tr ' ' '\n' | sed -n 8p)"
 #total dimensions for both windows side by side
-height=400
-width=800
+height=450
+width=700
 
 yoffset=$(((screen_height/2)-(height/2)))
 
@@ -117,18 +117,22 @@ while [ "$pastclick" == "$currentclick" ] && [ ! -f "$DIRECTORY/window2-exitcode
   sleep 0.1
 done
 
+delay="$(cat "${DIRECTORY}/delay")"
+
 while true;do #main loop that runs right pane forever
   currentclick="$(cat "${DIRECTORY}/currentclick")"
   #refreshes window2 each time a new list item is selected
   output="$(while true;do
+    checkimages &
     #screensaver preview window
     [ ! -z "$pid2" ] && kill $pid2 # kill previous instance if it exists
     rm -f "$DIRECTORY/window2-exitcode"
     (yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver \
       --form --columns=2 --separator='\n' \
-      --field="Wait: ":NUM "10" --field="minutes":RO "" \
+      --field="Wait: ":NUM "$delay"'!1..60' --field="Settings...":FBTN "$DIRECTORY/settings" \
+      --field="minutes":RO "" --field="Preview":FBTN "$DIRECTORY/preview" \
       "$([ -f "$DIRECTORY/$currentclick/screenshot.png" ] && echo --image="$DIRECTORY/$currentclick/screenshot.png")" --image-on-top \
-      --button="Preview:0" --button="Enable:2" &
+      --button="OK:0" --button="Cancel:2" --button="Apply:4" &
     pid2=$!
     echo "$pid2" > "$DIRECTORY/pid2"
     
@@ -163,40 +167,50 @@ while true;do #main loop that runs right pane forever
   
   echo "Output: ${output}EOO"
   
+  delay="$(echo "$output" | sed -n 1p)"
+  if [ -z "$delay" ];then
+    #read delay value from file if it's blank
+    delay="$(cat "${DIRECTORY}/delay")"
+  fi
+  
+  echo "Delay: $delay"
+  
   currentclick="$(cat "${DIRECTORY}/currentclick")"
   
   case $button in
-    1)
+    1|252)
       echo "User exited."
       exit 0
+      
       ;;
-    252)
-      echo "User exited."
-      exit 0
-      ;;
-    0)
-      echo "Button: Preview"
+    0|4)
+      echo "Button: OK or Apply"
       
       echo "Running install.sh for '$currentclick'..."
       #run selected screensaver's install script
       "${DIRECTORY}/$currentclick/install.sh"
       
-      echo "Running run.sh for '$currentclick'..."
-      #run selected screensaver's run script
-      "${DIRECTORY}/$currentclick/run.sh"
       
-      ;;
-    2)
-      echo "Button: Enable"
+      echo "Creating daemon script for '$currentclick'..."
+      #write new delay value to file
+      echo "$delay" > "${DIRECTORY}/delay"
       
-      echo "Running install.sh for '$currentclick'..."
-      #run selected screensaver's install script
-      "${DIRECTORY}/$currentclick/install.sh"
+      #create screensaver daemon script that waits specified amount of time
+      echo "#!/bin/bash
+while true;do
+  
+  #wait until idle time is greater or equal to the specified delay time
+  while [ $(xprintidle) -le $(($(cat "${DIRECTORY}/delay")*1000*60)) ];do
+    sleep 60
+  done
+  
+  "\""${DIRECTORY}/$currentclick/run.sh"\""
+done" > ~/.screensavers/daemon.sh
       
       echo "Creating systemd service for '$currentclick'..."
-      
       #Stop existing screensaver.service
       if [ -f /etc/systemd/system/screensaver.service ]; then
+        echo "Stopping the service first..."
         sudo systemctl stop screensaver	
         sudo systemctl disable screensaver	
       fi
@@ -208,26 +222,38 @@ while true;do #main loop that runs right pane forever
       [Service]
       User=pi
       Type=simple
-      ExecStart=/bin/bash ${DIRECTORY}/$currentclick/run.sh
+      ExecStart=/bin/bash $HOME/.screensavers/daemon.sh
       
       [Install]
-      WantedBy=multi-user.target" | sudo tee /etc/systemd/system/screensaver.service
+      WantedBy=multi-user.target" | sudo tee /etc/systemd/system/screensaver.service >/dev/null
       
+      echo "Reloading systemd daemon..."
       sudo systemctl daemon-reload
       sudo systemctl start screensaver
       sudo systemctl enable screensaver
       
       #print instructions
-      echo "Reload service daemon      : sudo systemctl daemon-reload
-      Verify service is running  : sudo systemctl status screensaver
-      Enable on startup          : sudo systemctl enable screensaver
-      Start screensaver service  : sudo systemctl start screensaver
-      Stop screensaver service   : sudo systemctl stop screensaver"
+      echo "
+Reload service daemon      : sudo systemctl daemon-reload
+Verify service is running  : sudo systemctl status screensaver
+Enable on startup          : sudo systemctl enable screensaver
+Start screensaver service  : sudo systemctl start screensaver
+Stop screensaver service   : sudo systemctl stop screensaver"
       
+      #if OK clicked, exit program now
+      if [ $button == 0 ];then
+        echo "OK button clicked, so exiting now"
+        exit 0
+      fi
+      
+      ;;
+    2)
+      echo "Button: Cancel"
+      exit 0
       ;;
     *)
       error "Unknown button: $button"
       ;;
   esac
-  checkimages &
+  
 done

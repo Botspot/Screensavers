@@ -1,0 +1,22 @@
+#!/bin/bash
+
+DIRECTORY="$(dirname "$0")"
+
+error() {
+  echo -e "\e[91m$1\e[39m" 1>&2
+  exit 1
+}
+
+#launch the given Windows screensaver, based on the currentclick file
+
+if [ ! -f "${DIRECTORY}/currentclick" ];then
+  error "currentclick file does not exist!\nThis script is meant to preview a given screensaver."
+fi
+
+currentclick="$(cat "${DIRECTORY}/currentclick")"
+
+echo "Running install.sh for '$currentclick'..." 1>&2
+"$DIRECTORY/$currentclick/install.sh" 1>&2 || exit 1
+
+echo "Running run.sh for '$currentclick'..." 1>&2
+"$DIRECTORY/$currentclick/run.sh" 1>&2
