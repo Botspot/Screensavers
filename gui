@@ -73,6 +73,8 @@ elif ! command -v wine >/dev/null ;then
   error "An x86 version of Wine must be installed.\nUse Pi-Apps to install Wine.\nhttps://github.com/Botspot/pi-apps"
 elif ! command -v xdpyinfo >/dev/null ;then
   error "In order to determine the dimensions of your screen, xdpyinfo must be installed.If you are on a debian-based system, this should work: 'sudo apt install x11-utils'"
+elif ! command -v xprintidle >/dev/null ;then
+  error "In order to measure inactivity time, xprintidle is necessary.If you are on a debian-based system, this should work: 'sudo apt install xprintidle'"
 fi
 
 #check for updates
