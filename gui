@@ -77,7 +77,9 @@ fi
 
 #check for updates
 if [ ! -f "${DIRECTORY}/no-update-check" ];then
+  cd "$DIRECTORY"
   localhash="$(git rev-parse HEAD)"
+  cd
   latesthash="$(git ls-remote https://github.com/Botspot/Screensavers HEAD | awk '{print $1}')"
   if [ "$localhash" != "$latesthash" ] && [ ! -z "$latesthash" ] && [ ! -z "$localhash" ];then
     echo -e "\e[93mThis program is out of date. Consider updating by running these commands:\n\ncd ${DIRECTORY}/\ngit pull\n\nRunning these commands will try to merge upstream changes with local modifications.\e[39m"
