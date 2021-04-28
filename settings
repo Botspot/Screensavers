@@ -17,7 +17,7 @@ currentclick="$(cat "${DIRECTORY}/currentclick")"
 
 #Attempt to generate settings script if it doesn't exist
 if [ ! -f "$DIRECTORY/$currentclick/settings.sh" ];then
-  cat "$DIRECTORY/$currentclick/run.sh" | sed 's+ /s$+ /c$+g' > "$DIRECTORY/$currentclick/settings.sh"
+  cat "$DIRECTORY/$currentclick/run.sh" | sed 's+ /s$+ /c+g' > "$DIRECTORY/$currentclick/settings.sh"
   chmod +x "$DIRECTORY/$currentclick/settings.sh"
 fi
 
