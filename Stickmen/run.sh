@@ -1,3 +1,3 @@
 #!/bin/bash
 
-WINEPREFIX=~/.screensavers wine ~/.screensavers/drive_c/windows/system32/stickmen.scr /s
+WINEPREFIX=~/.screensavers wine stickmen.scr /s

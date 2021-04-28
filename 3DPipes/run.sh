@@ -1,4 +1,4 @@
 #!/bin/sh
 
-WINEPREFIX=~/.screensavers wine ~/.screensavers/drive_c/windows/3DPipes.scr /s
+WINEPREFIX=~/.screensavers wine 3DPipes.scr /s
 
