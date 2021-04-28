@@ -8,7 +8,7 @@ git clone https://github.com/Botspot/Screensavers
 ```
 ~/Screensavers/gui
 ```
-Screenshot of the GUI:
+Screenshot of the GUI:  
 ![2021-04-28-122643_1920x1080_scrot](https://user-images.githubusercontent.com/54716352/116447638-d40be780-a81d-11eb-97f8-3466f5d7324b.png)
 
 ### Notes:
@@ -24,7 +24,7 @@ Be aware that **3D** screensavers don't tend to work.
 - Delete the screenshot images, and you might as well get rid of `settings.sh`.
 - Drop in whatever files are necessary for your screensaver to work. Usually, only a single .scr file is needed, but others may require some fonts.
 - Edit the `install.sh` script to copy your files to the wine prefix. Try to use relative paths (instead of absolute paths like `/home/pi`), as demonstrated in Botspot's scripts.
-- Edit the `run.sh` script to run your desired .scr file from the wine prefix. Example syntax:
+- Edit the `run.sh` script to run your desired .scr file from the wine prefix. Example syntax:  
 `WINEPREFIX=~/.screensavers wine fireplace.scr /s` <-- replace "fireplace.scr" with the screensaver executable you are using.
 - At this point, the screensaver should install and preview fine from the GUI.
 - Last of all, take a screenshot of your screensaver in action, and copy the screensaver to your folder. Don't worry about renameing it or resizing it - the `gui` script will take care of this for you. (You may have to install `imagemagick` first for this to work.)
