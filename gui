@@ -235,14 +235,13 @@ while true;do #main loop that runs right pane forever
         
         #create screensaver daemon script that waits specified amount of time
         echo "#!/bin/bash
+export DISPLAY=:0
 while true;do
   
   #wait until idle time is greater or equal to the specified delay time
   while [ "\$"(xprintidle) -le $(($(cat "${DIRECTORY}/delay")*1000*60)) ];do
     sleep 60
   done
-  
-  export DISPLAY=:0
   
   "\""${DIRECTORY}/$currentclick/run.sh"\""
 done" > ~/.screensavers/daemon.sh
