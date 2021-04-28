@@ -42,6 +42,10 @@ checkimages() { #resize all *.png images to 500px wide
       #backup the image
       mv -f "$image" "$sc_original_path"
       
+      if ! command -v identify >/dev/null || ! command -v convert >/dev/null ;then
+        error "The identify and convert commands are necessary to resize screenshots.\nIf you are on a debian-based system, this should work: 'sudo apt install imagemagick'"
+      fi
+      
       if [ "$(identify -format '%w' "$sc_original_path")" != 500 ];then
         #resize the image to 500 pixels wide, and save it to screenshot.png
         convert "$sc_original_path" -resize 500x "$(dirname "$image")/screenshot.png"
@@ -62,6 +66,24 @@ cleanup() {
 #run cleanup function
 cleanup
 
+#check for dependencies
+if ! command -v yad >/dev/null ;then
+  error "The YAD dialog program must be installed.\nIf you are on a debian-based system, this should work: 'sudo apt install yad'"
+elif ! command -v wine >/dev/null ;then
+  error "An x86 version of Wine must be installed.\nUse Pi-Apps to install Wine.\nhttps://github.com/Botspot/pi-apps"
+elif ! command -v xdpyinfo >/dev/null ;then
+  error "In order to determine the dimensions of your screen, xdpyinfo must be installed.If you are on a debian-based system, this should work: 'sudo apt install x11-utils'"
+fi
+
+#check for updates
+if [ ! -f "${DIRECTORY}/no-update-check" ];then
+  localhash="$(git rev-parse HEAD)"
+  latesthash="$(git ls-remote https://github.com/Botspot/Screensavers HEAD | awk '{print $1}')"
+  if [ "$localhash" != "$latesthash" ] && [ ! -z "$latesthash" ] && [ ! -z "$localhash" ];then
+    echo -e "\e[93mThis program is out of date. Consider updating by running these commands:\n\ncd ${DIRECTORY}/\ngit pull\n\nRunning these commands will try to merge upstream changes with local modifications.\e[39m"
+    echo -e "To disable this notification, create a file named: '${DIRECTORY}/no-update-check'"
+  fi
+fi
 
 #Screen dimension stuff
 {
@@ -186,60 +208,75 @@ while true;do #main loop that runs right pane forever
     0|4)
       echo "Button: OK or Apply"
       
-      echo "Running install.sh for '$currentclick'..."
-      #run selected screensaver's install script
-      "${DIRECTORY}/$currentclick/install.sh"
+      if [ "$currentclick" == none ];then
+        echo "Removing systemd service..."
+        #Stop existing screensaver.service
+        if [ -f /etc/systemd/system/screensaver.service ]; then
+          echo "Stopping the service first..."
+          sudo systemctl stop screensaver
+          sudo systemctl disable screensaver
+          sudo rm /etc/systemd/system/screensaver.service
+        fi
+        
+        echo "Reloading systemd daemon..."
+        sudo systemctl daemon-reload
+        
+      else #screensaver is not 'none'
+        echo "Running install.sh for '$currentclick'..."
+        #run selected screensaver's install script
+        "${DIRECTORY}/$currentclick/install.sh"
+        
+        
+        echo "Creating daemon script for '$currentclick'..."
+        #write new delay value to file
+        echo "$delay" > "${DIRECTORY}/delay"
+        
+        #create screensaver daemon script that waits specified amount of time
+        echo "#!/bin/bash
+  while true;do
+    
+    #wait until idle time is greater or equal to the specified delay time
+    while [ $(xprintidle) -le $(($(cat "${DIRECTORY}/delay")*1000*60)) ];do
+      sleep 60
+    done
+    
+    "\""${DIRECTORY}/$currentclick/run.sh"\""
+  done" > ~/.screensavers/daemon.sh
+        
+        echo "Creating systemd service for '$currentclick'..."
+        #Stop existing screensaver.service
+        if [ -f /etc/systemd/system/screensaver.service ]; then
+          echo "Stopping the service first..."
+          sudo systemctl stop screensaver
+          sudo systemctl disable screensaver
+        fi
+        
+        #create the service
+        echo "[Unit]
+        Description=Screensaver
+        
+        [Service]
+        User=pi
+        Type=simple
+        ExecStart=/bin/bash $HOME/.screensavers/daemon.sh
+        
+        [Install]
+        WantedBy=multi-user.target" | sudo tee /etc/systemd/system/screensaver.service >/dev/null
+        
+        echo "Reloading systemd daemon..."
+        sudo systemctl daemon-reload
+        sudo systemctl start screensaver
+        sudo systemctl enable screensaver
+        
+        #print instructions
+        echo "
+  Reload service daemon      : sudo systemctl daemon-reload
+  Verify service is running  : sudo systemctl status screensaver
+  Enable on startup          : sudo systemctl enable screensaver
+  Start screensaver service  : sudo systemctl start screensaver
+  Stop screensaver service   : sudo systemctl stop screensaver"
       
-      
-      echo "Creating daemon script for '$currentclick'..."
-      #write new delay value to file
-      echo "$delay" > "${DIRECTORY}/delay"
-      
-      #create screensaver daemon script that waits specified amount of time
-      echo "#!/bin/bash
-while true;do
-  
-  #wait until idle time is greater or equal to the specified delay time
-  while [ $(xprintidle) -le $(($(cat "${DIRECTORY}/delay")*1000*60)) ];do
-    sleep 60
-  done
-  
-  "\""${DIRECTORY}/$currentclick/run.sh"\""
-done" > ~/.screensavers/daemon.sh
-      
-      echo "Creating systemd service for '$currentclick'..."
-      #Stop existing screensaver.service
-      if [ -f /etc/systemd/system/screensaver.service ]; then
-        echo "Stopping the service first..."
-        sudo systemctl stop screensaver	
-        sudo systemctl disable screensaver	
       fi
-      
-      #create the service
-      echo "[Unit]
-      Description=Screensaver
-      
-      [Service]
-      User=pi
-      Type=simple
-      ExecStart=/bin/bash $HOME/.screensavers/daemon.sh
-      
-      [Install]
-      WantedBy=multi-user.target" | sudo tee /etc/systemd/system/screensaver.service >/dev/null
-      
-      echo "Reloading systemd daemon..."
-      sudo systemctl daemon-reload
-      sudo systemctl start screensaver
-      sudo systemctl enable screensaver
-      
-      #print instructions
-      echo "
-Reload service daemon      : sudo systemctl daemon-reload
-Verify service is running  : sudo systemctl status screensaver
-Enable on startup          : sudo systemctl enable screensaver
-Start screensaver service  : sudo systemctl start screensaver
-Stop screensaver service   : sudo systemctl stop screensaver"
-      
       #if OK clicked, exit program now
       if [ $button == 0 ];then
         echo "OK button clicked, so exiting now"
