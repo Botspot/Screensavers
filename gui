@@ -89,6 +89,19 @@ if [ ! -f "${DIRECTORY}/no-update-check" ];then
   fi
 fi
 
+#create menu launcher
+if [ ! -f ~/.local/share/applications/windows-screensavers.desktop ];then
+  echo "[Desktop Entry]
+Exec=$DIRECTORY/gui
+Icon=xscreensaver
+Terminal=false
+Name=Windows Screensavers
+Comment=Select and configure Windows screensavers that run on your Pi with Wine
+Type=Application
+Categories=Settings;DesktopSettings;Security;X-XFCE;" > ~/.local/share/applications/windows-screensavers.desktop
+  
+fi
+
 #Screen dimension stuff
 {
 screen_width="$(xdpyinfo | grep 'dimensions:' | tr 'x' '\n' | tr ' ' '\n' | sed -n 7p)"
@@ -148,27 +161,47 @@ delay="$(cat "${DIRECTORY}/delay")"
 while true;do #main loop that runs right pane forever
   currentclick="$(cat "${DIRECTORY}/currentclick")"
   #refreshes window2 each time a new list item is selected
-  output="$(while true;do
+  output="$(
+  while true;do
     checkimages &
     #screensaver preview window
     [ ! -z "$pid2" ] && kill $pid2 # kill previous instance if it exists
     rm -f "$DIRECTORY/window2-exitcode"
-    (yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver \
-      --form --columns=2 --separator='\n' \
-      --field="Wait: ":NUM "$delay"'!1..60' --field="Settings...":FBTN "$DIRECTORY/settings" \
-      --field="minutes":RO "" --field="Preview":FBTN "$DIRECTORY/preview" \
-      "$([ -f "$DIRECTORY/$currentclick/screenshot.png" ] && echo --image="$DIRECTORY/$currentclick/screenshot.png")" --image-on-top \
-      --button="OK:0" --button="Cancel:2" --button="Apply:4" &
-    pid2=$!
-    echo "$pid2" > "$DIRECTORY/pid2"
-    
-    #write exit code to file as long as it was not the termination exit code. (143)
-    wait $pid2 ; exitcode2=$?
-    if [ $exitcode2 != 143 ];then
-      echo $exitcode2 > "$DIRECTORY/window2-exitcode"
+    #display simplified window if only run.sh exists
+    if [ -f "$DIRECTORY/$currentclick/install.sh" ];then
+      (
+      yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver \
+        --form --columns=2 --separator='\n' \
+        --field="Wait: ":NUM "$delay"'!1..60' --field="Settings...!!Installs the screensaver, then runs its settings.sh script.":FBTN "$DIRECTORY/settings" \
+        --field="minutes":RO "" --field="Preview!!Installs the screensaver, then runs it."$'\n'"The screensaver service won't be modified.":FBTN "$DIRECTORY/preview" \
+        "$([ -f "$DIRECTORY/$currentclick/screenshot.png" ] && echo --image="$DIRECTORY/$currentclick/screenshot.png")" --image-on-top \
+        --button="OK!!Installs the screensaver, then generates the screensaver service."$'\n'"The list of screensavers will close when finished.:0" --button="Cancel!!Don't make any changes.:2" --button="Apply!!Installs the screensaver, then generates the screensaver service."$'\n'"This window will reappear when finished.:4" &
+      pid2=$!
+      echo "$pid2" > "$DIRECTORY/pid2"
+      
+      #write exit code to file as long as it was not the termination exit code. (143)
+      wait $pid2 ; exitcode2=$?
+      if [ $exitcode2 != 143 ];then
+        echo $exitcode2 > "$DIRECTORY/window2-exitcode"
+      fi
+      ) &
+      
+    else #install.sh does not exist, assume run.sh exists
+      (
+      yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver \
+        "$([ -f "$DIRECTORY/$currentclick/screenshot.png" ] && echo --image="$DIRECTORY/$currentclick/screenshot.png")" --image-on-top \
+        --button="Cancel!!Don't make any changes.:2" --button="Run script!!"${DIRECTORY}/$currentclick/run.sh":6" &
+      pid2=$!
+      echo "$pid2" > "$DIRECTORY/pid2"
+      
+      #write exit code to file as long as it was not the termination exit code. (143)
+      wait $pid2 ; exitcode2=$?
+      if [ $exitcode2 != 143 ];then
+        echo $exitcode2 > "$DIRECTORY/window2-exitcode"
+      fi
+      ) &
+      
     fi
-    ) &
-    
     sleep 0.5
     pid2="$(cat "$DIRECTORY/pid2")"
     
@@ -188,7 +221,10 @@ while true;do #main loop that runs right pane forever
       #exit if currentclick missing
       exit 0
     fi
-  done)" #exits with yad's exit code placed in window2-exitcode file and as the whole statement's exit code
+  done
+  )"
+  
+  
   button=$?
   
   echo "Output: ${output}EOO"
@@ -238,14 +274,16 @@ while true;do #main loop that runs right pane forever
         #create screensaver daemon script that waits specified amount of time
         echo "#!/bin/bash
 export DISPLAY=:0
+
 while true;do
   
-  #wait until idle time is greater or equal to the specified delay time
-  while [ "\$"(xprintidle) -le $(($(cat "${DIRECTORY}/delay")*1000*60)) ];do
-    sleep 60
-  done
+  #if idle time is greater than set time, and no audio devices are playing (stackoverflow.com/a/17404952)
   
-  "\""${DIRECTORY}/$currentclick/run.sh"\""
+  if [ "\$"(xprintidle) -gt $(($(cat "${DIRECTORY}/delay")*1000*60)) ] && [ -z "$(grep -r RUNNING /proc/asound/card*/pcm*/sub*/status)" ];then
+    "\""/home/pi/Screensavers/RetroScifi Blue/run.sh"\""
+  fi
+  
+  sleep 60
 done" > ~/.screensavers/daemon.sh
         chmod +x ~/.screensavers/daemon.sh
         
@@ -279,9 +317,9 @@ done" > ~/.screensavers/daemon.sh
         
         #print instructions
         echo -e "\e[93m
-Reload service daemon      : sudo systemctl daemon-reload
 Verify service is running  : sudo systemctl status screensaver
 Enable on startup          : sudo systemctl enable screensaver
+Disable on startup         : sudo systemctl disable screensaver
 Start screensaver service  : sudo systemctl start screensaver
 Stop screensaver service   : sudo systemctl stop screensaver\e[39m"
       
@@ -295,6 +333,13 @@ Stop screensaver service   : sudo systemctl stop screensaver\e[39m"
       ;;
     2)
       echo "Button: Cancel"
+      exit 0
+      ;;
+    6)
+      echo "Button: Run script"
+      echo "Running run.sh for '$currentclick'..."
+      #run selected screensaver's install script
+      "${DIRECTORY}/$currentclick/run.sh"
       exit 0
       ;;
     *)
