@@ -279,8 +279,8 @@ while true;do
   
   #if idle time is greater than set time, and no audio devices are playing (stackoverflow.com/a/17404952)
   
-  if [ "\$"(xprintidle) -gt $(($(cat "${DIRECTORY}/delay")*1000*60)) ] && [ -z "$(grep -r RUNNING /proc/asound/card*/pcm*/sub*/status)" ];then
-    "\""/home/pi/Screensavers/RetroScifi Blue/run.sh"\""
+  if [ "\$"(xprintidle) -gt $(($(cat "${DIRECTORY}/delay")*1000*60)) ] && [ -z "'"$(grep -r RUNNING /proc/asound/card*/pcm*/sub*/status)"'" ];then
+    "\""${DIRECTORY}/$currentclick/run.sh"\""
   fi
   
   sleep 60
