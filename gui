@@ -17,7 +17,7 @@ error() {
   kill -w -s TERM $TOP_PID
 }
 
-
+export GDK_BACKEND=x11 #fix window placement on wayland
 trap closewindows EXIT
 export TOP_PID=$$
 
@@ -70,11 +70,11 @@ cleanup
 if ! command -v yad >/dev/null ;then
   error "The YAD dialog program must be installed.\nIf you are on a debian-based system, this should work: 'sudo apt install yad'"
 elif ! command -v wine >/dev/null ;then
-  error "An x86 version of Wine must be installed.\nUse Pi-Apps to install Wine.\nhttps://github.com/Botspot/pi-apps"
+  error "Wine must be installed.\nUse Pi-Apps to install Wine.\nhttps://github.com/Botspot/pi-apps"
 elif ! command -v xdpyinfo >/dev/null ;then
-  error "In order to determine the dimensions of your screen, xdpyinfo must be installed.If you are on a debian-based system, this should work: 'sudo apt install x11-utils'"
+  error "In order to determine the dimensions of your screen, xdpyinfo must be installed.\nIf you are on a debian-based system, this should work: 'sudo apt install x11-utils'"
 elif ! command -v xprintidle >/dev/null ;then
-  error "In order to measure inactivity time, xprintidle is necessary.If you are on a debian-based system, this should work: 'sudo apt install xprintidle'"
+  error "In order to measure inactivity time, xprintidle is necessary.\nIf you are on a debian-based system, this should work: 'sudo apt install xprintidle'"
 fi
 
 #check for updates
@@ -132,7 +132,8 @@ error "exited" ) &
 
 
 #screensaver list on the left, run in the background
-(echo "$list" | yad --list --geometry=${width1}x${height}+${xoffset1}+${yoffset} --window-icon=xscreensaver --title='' \
+(echo "$list" | yad --list --geometry=${width1}x${height}+${xoffset1}+${yoffset} \
+  --class screensaver --window-icon=xscreensaver --title=' ' \
   --no-headers --column=item --select-action="$DIRECTORY"/clickhandler --no-buttons &
 pid1=$!
 echo $pid1 > "$DIRECTORY/pid1"
@@ -147,14 +148,8 @@ done
 pid1="$(cat "$DIRECTORY/pid1")"
 
 #wait until a screensaver is clicked before launching second window
-echo '' > "${DIRECTORY}/currentclick"
-currentclick="$(cat "${DIRECTORY}/currentclick")"
-pastclick="$currentclick"
-while [ "$pastclick" == "$currentclick" ] && [ ! -f "$DIRECTORY/window2-exitcode" ];do
-  pastclick="$currentclick"
-  currentclick="$(cat "${DIRECTORY}/currentclick")"
-  sleep 0.1
-done
+echo -n '' > "${DIRECTORY}/currentclick"
+currentclick="$(read line < <(tail -f --retry "${DIRECTORY}/currentclick" 2>/dev/null) ; echo "$line")"
 
 delay="$(cat "${DIRECTORY}/delay")"
 
@@ -170,9 +165,16 @@ while true;do #main loop that runs right pane forever
     #display simplified window if only run.sh exists
     if [ -f "$DIRECTORY/$currentclick/install.sh" ];then
       (
-      yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver \
+      #display warning on wayland
+      if [ ! -z "$WAYLAND_DISPLAY" ];then
+        text=(--field='Warning: On Wayland the screensaver cannot start when computer is inactive! Clicking OK or Apply will not work. Just click Preview.:LBL' '')
+      else
+        text=()
+      fi
+      yad --geometry=${width2}x${height}+${xoffset2}+${yoffset} --title="$currentclick" --window-icon=xscreensaver --class screensaver \
         --form --columns=2 --separator='\n' \
         --field="Wait: ":NUM "$delay"'!1..60' --field="Settings...!!Installs the screensaver, then runs its settings.sh script.":FBTN "$DIRECTORY/settings" \
+        "${text[@]}" \
         --field="minutes":RO "" --field="Preview!!Installs the screensaver, then runs it."$'\n'"The screensaver service won't be modified.":FBTN "$DIRECTORY/preview" \
         "$([ -f "$DIRECTORY/$currentclick/screenshot.png" ] && echo --image="$DIRECTORY/$currentclick/screenshot.png")" --image-on-top \
         --button="OK!!Installs the screensaver, then generates the screensaver service."$'\n'"The list of screensavers will close when finished.:0" --button="Cancel!!Don't make any changes.:2" --button="Apply!!Installs the screensaver, then generates the screensaver service."$'\n'"This window will reappear when finished.:4" &
@@ -206,12 +208,8 @@ while true;do #main loop that runs right pane forever
     pid2="$(cat "$DIRECTORY/pid2")"
     
     #wait until selection in window1 changes
-    pastclick="$currentclick"
-    while [ -f "${DIRECTORY}/currentclick" ] && [ "$pastclick" == "$currentclick" ] && [ ! -f "$DIRECTORY/window2-exitcode" ];do
-      pastclick="$currentclick"
-      currentclick="$(cat "${DIRECTORY}/currentclick")"
-      sleep 0.1
-    done
+    currentclick="$(while read line ;do [ "$line" != "$currentclick" ] && break ; done < <(tail -f --retry "${DIRECTORY}/currentclick" 2>/dev/null) ; echo "$line")"
+    
     if [ -f "$DIRECTORY/window2-exitcode" ];then
       #if exitcode file exists, exit this while loop with that exit code.
       echo "exit $(cat "$DIRECTORY/window2-exitcode")" 1>&2
@@ -223,7 +221,6 @@ while true;do #main loop that runs right pane forever
     fi
   done
   )"
-  
   
   button=$?
   
