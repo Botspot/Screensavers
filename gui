@@ -84,8 +84,9 @@ if [ ! -f "${DIRECTORY}/no-update-check" ];then
   cd
   latesthash="$(git ls-remote https://github.com/Botspot/Screensavers HEAD | awk '{print $1}')"
   if [ "$localhash" != "$latesthash" ] && [ ! -z "$latesthash" ] && [ ! -z "$localhash" ];then
-    echo -e "\e[93mThis program is out of date. Consider updating by running these commands:\n\ncd ${DIRECTORY}/\ngit pull\n\nRunning these commands will try to merge upstream changes with local modifications.\e[39m"
-    echo -e "To disable this notification, create a file named: '${DIRECTORY}/no-update-check'\n"
+    echo -e "Updating..."
+    git pull
+    echo -e "To disable this, create a file named: '${DIRECTORY}/no-update-check'\n"
   fi
 fi
 
