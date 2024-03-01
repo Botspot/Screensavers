@@ -1,3 +1,13 @@
 #!/bin/bash
 
-cp $(dirname "$0")/Starfield.scr ~/.screensavers/drive_c/windows/
+#On my system this is translated to ~/Screensavers/<screensaver name>
+FILES="$(dirname "$0")"
+export WINEPREFIX="$HOME/.screensavers"
+
+#Setup wine prefix
+if [ ! -e "$HOME/.screensavers" ]; then
+	wine wineboot || exit 1
+	wineserver -w
+fi
+
+cp "$FILES/Starfield.scr" "$WINEPREFIX/drive_c/windows/"

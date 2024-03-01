@@ -1,16 +1,17 @@
 #!/bin/bash
 
-#On my system this is translated to ~/Screensavers/RetroScifiGreen
+#On my system this is translated to ~/Screensavers/<screensaver name>
 FILES="$(dirname "$0")/files"
+export WINEPREFIX="$HOME/.screensavers"
 
 #Setup wine prefix
-dir="$HOME/.screensavers"
-if [ ! -e $dir ]; then
-	WINEARCH=win32 WINEPREFIX=~/.screensavers winecfg || exit 1
+if [ ! -e "$HOME/.screensavers" ]; then
+	wine wineboot || exit 1
+	wineserver -w
 fi
 
 #Install screensaver
-cp "$FILES/RetroSciFi.scr" ~/.screensavers/drive_c/windows/
-cp "$FILES/Msvbvm60.dll" ~/.screensavers/drive_c/windows/
-cp "$FILES"/fonts/*.TTF ~/.screensavers/drive_c/windows/Fonts
+cp "$FILES/RetroSciFi.scr" "$WINEPREFIX/drive_c/windows/"
+cp "$FILES/Msvbvm60.dll" "$WINEPREFIX/drive_c/windows/"
+cp "$FILES"/fonts/*.TTF "$WINEPREFIX/drive_c/windows/Fonts"
 
