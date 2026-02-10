@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #On my system this is translated to ~/Screensavers/<screensaver name>
-FILES="$(dirname "$0")/files"
+FILES="$(dirname "$0")"
 export WINEPREFIX="$HOME/.screensavers"
 
 #Setup wine prefix
